@@ -33,7 +33,8 @@ export const prlimitArgumentVector = (
   `--as=${limits.address_space_bytes}:${limits.address_space_bytes}`,
   `--fsize=${limits.file_bytes}:${limits.file_bytes}`,
   `--cpu=${limits.cpu_seconds}:${limits.cpu_seconds}`,
-  "--core=0:0",
+  // RLIMIT_CORE=1 discards piped dumps; 0 is still delivered to pipe handlers.
+  "--core=1:1",
   "--",
   command,
 ];

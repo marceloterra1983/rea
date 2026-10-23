@@ -120,7 +120,7 @@ export const runWakaruCommand = async (context: WakaruCommandContext) => {
     arguments: [
       `--as=${String(RECOVERY_LIMITS.addressSpaceBytes)}`,
       `--fsize=${String(RECOVERY_LIMITS.outputBytes)}`,
-      "--core=0",
+      "--core=1",
       "--cpu=120",
       "--",
       context.command,

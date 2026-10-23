@@ -123,7 +123,7 @@ export const runFirmwareCommand = async (context: {
     arguments: [
       `--as=${FIRMWARE_LIMITS.addressSpaceBytes}`,
       `--fsize=${context.outputBudget?.bytes ?? FIRMWARE_LIMITS.reportBytes}`,
-      "--core=0",
+      "--core=1",
       "--cpu=120",
       "--",
       context.command,

@@ -62,7 +62,7 @@ it("pairs each effective ceiling with itself before the producer argv", () => {
     "--as=1073741824:1073741824",
     "--fsize=67108864:67108864",
     "--cpu=30:30",
-    "--core=0:0",
+    "--core=1:1",
     "--",
     "/bin/producer",
   ]);
@@ -75,7 +75,7 @@ it("pairs each effective ceiling with itself before the producer argv", () => {
     "--as=10:10",
     "--fsize=67108864:67108864",
     "--cpu=30:30",
-    "--core=0:0",
+    "--core=1:1",
     "--",
     "/bin/producer",
   ]);

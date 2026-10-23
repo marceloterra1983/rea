@@ -221,7 +221,7 @@ export class EvmoleInterfaceProvider implements EvmInterfacePort {
           arguments: [
             `--as=${String(workerLimits.addressSpaceBytes)}:`,
             `--fsize=${String(workerLimits.fileSizeBytes)}:`,
-            "--core=0:",
+            "--core=1:",
             `--cpu=${String(workerLimits.cpuSeconds)}:`,
             "--",
             process.execPath,

@@ -53,8 +53,12 @@ it.runIf(!unsupportedHost).each([
           );
         return spawnOwnedProviderProcess({
           ...spawn,
-          command: process.execPath,
+          // Deliberate signal deaths must not reach systemd-coredump (see LinuxResourceLimits).
+          command: "/usr/bin/prlimit",
           arguments: [
+            "--core=1:1",
+            "--",
+            process.execPath,
             "-e",
             failure === "EFBIG"
               ? 'process.stdout.write("resource diagnostic", () => { process.exitCode = 76; })'

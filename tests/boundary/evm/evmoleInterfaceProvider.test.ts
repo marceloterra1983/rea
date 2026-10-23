@@ -56,8 +56,12 @@ it.runIf(!unsupportedHost).each(["SIGXCPU", "SIGXFSZ", "EFBIG"])(
         await writeFile(join(ownedPath, "resource.failure"), "F");
       return spawnOwnedProviderProcess({
         ...spawn,
-        command: process.execPath,
+        // Deliberate signal deaths must not reach systemd-coredump (see LinuxResourceLimits).
+        command: "/usr/bin/prlimit",
         arguments: [
+          "--core=1:1",
+          "--",
+          process.execPath,
           "-e",
           failure === "EFBIG"
             ? 'process.stdout.write("resource diagnostic", () => { process.exitCode = 76; })'
