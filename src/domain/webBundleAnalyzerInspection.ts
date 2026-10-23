@@ -18,6 +18,7 @@ import { semanticStaticPropertyName } from "./javascript/javascriptAstValues.js"
 import {
   calleeName,
   endpointArgument,
+  isCalleeName,
   stringValue,
 } from "./javascript/javascriptStaticAnalysisHelpers.js";
 import {
@@ -203,8 +204,7 @@ const inspectCall = (
     });
   if (
     (t.isCallExpression(node) || t.isNewExpression(node)) &&
-    (name.endsWith("modelContext.registerTool") ||
-      name === "modelContext.registerTool")
+    isCalleeName(name, "modelContext.registerTool")
   )
     addWebMcpDeclaration(script, node, accumulator);
 };

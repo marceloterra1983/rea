@@ -428,6 +428,18 @@ describe("web bundle configuration and navigation parity", () => {
       expect.objectContaining({ value: "https://embedded.test/app" }),
     );
   });
+
+  it("does not treat a longer registerTool name as a WebMCP declaration", () => {
+    const result = analyzeCapturedWebBundle(
+      inspection(`
+        document.modelContext.registerTool({ name: "real-tool" });
+        document.notmodelContext.registerTool({ name: "not-a-tool" });
+      `),
+    );
+    expect(result.observations.webmcp_declarations).toEqual([
+      expect.objectContaining({ name: "real-tool" }),
+    ]);
+  });
 });
 
 describe("web bundle artifact metadata", () => {

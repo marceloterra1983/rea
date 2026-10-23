@@ -541,6 +541,14 @@ const isKeyedCollectionReceiver = (callee: t.Node): boolean => {
   return property === "headers" || property === "searchParams";
 };
 
+/**
+ * Match a callee spelling exactly or as a dotted member. A longer identifier
+ * that only shares a suffix, such as `downloadURL` ending in `loadURL`, is a
+ * different callee.
+ */
+export const isCalleeName = (name: string, callee: string): boolean =>
+  name === callee || name.endsWith(`.${callee}`);
+
 /** Select the literal URL argument for recognized network callees. */
 export const endpointArgument = (
   name: string,
@@ -555,18 +563,15 @@ export const endpointArgument = (
 ): string | undefined => {
   if (receiverFact === "window") return undefined;
   if (
-    name === "fetch" ||
-    name.endsWith(".fetch") ||
-    name === "WebSocket" ||
-    name.endsWith(".WebSocket") ||
-    name === "EventSource" ||
-    name.endsWith(".EventSource")
+    isCalleeName(name, "fetch") ||
+    isCalleeName(name, "WebSocket") ||
+    isCalleeName(name, "EventSource")
   )
     return stringValue(args[0]);
   if (name.endsWith(".open"))
     return xhrOpenUrl(name, args[0], args[1], receiverFact);
   const method = ["get", "post", "put", "patch", "delete", "request"].find(
-    (candidate) => name === candidate || name.endsWith(`.${candidate}`),
+    (candidate) => isCalleeName(name, candidate),
   );
   if (method !== undefined) {
     const value = stringValue(args[0]);
@@ -582,21 +587,26 @@ export const endpointArgument = (
       : value;
   }
   // navigator.sendBeacon(url, data) queues a POST to its first argument.
-  if (name === "sendBeacon" || name.endsWith(".sendBeacon"))
+  if (isCalleeName(name, "sendBeacon")) return stringValue(args[0]);
+  // downloadURL shares a suffix with loadURL and is a download, not a page load.
+  if (isCalleeName(name, "downloadURL") || isCalleeName(name, "loadURL"))
     return stringValue(args[0]);
-  if (name.endsWith("loadURL")) return stringValue(args[0]);
   return undefined;
 };
+
+/** Match a storage object, not a longer identifier with the same trailing spelling. */
+const storageProperty = (name: string, property: string): boolean =>
+  name.startsWith(`${property}.`) || name.includes(`.${property}.`);
 
 /** Classify a recognized storage API call name. */
 export const storageKind = (
   name: string,
 ): JavaScriptStaticStorage["kind"] | undefined => {
-  if (name.includes("localStorage.")) return "local-storage";
-  if (name.includes("sessionStorage.")) return "session-storage";
-  if (name.endsWith("indexedDB.open")) return "indexed-db";
-  if (name.endsWith("caches.open")) return "cache-storage";
-  if (name === "Database" || name.endsWith(".Database")) return "sqlite";
+  if (storageProperty(name, "localStorage")) return "local-storage";
+  if (storageProperty(name, "sessionStorage")) return "session-storage";
+  if (isCalleeName(name, "indexedDB.open")) return "indexed-db";
+  if (isCalleeName(name, "caches.open")) return "cache-storage";
+  if (isCalleeName(name, "Database")) return "sqlite";
   return undefined;
 };
 
