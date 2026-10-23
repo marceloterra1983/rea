@@ -84,6 +84,77 @@ describe("JavaScript semantic analysis: runtime boundaries 1", () => {
     expect(ir.timerOperations).toEqual([]);
   });
 
+  it("tracks timers called through an unmodified global object", () => {
+    const ir = analyzeJavaScriptSemantics(`
+      import * as timers from "node:timers";
+      const handle = window.setTimeout(work, 25);
+      globalThis.clearTimeout(handle);
+      self.setInterval(work, 10);
+      window?.setImmediate(work);
+      timers.setTimeout(work, 5);
+    `);
+
+    expect(
+      ir.timerOperations.map(
+        ({ kind, method, delayMilliseconds, resolution, linkedTimerId }) => ({
+          kind,
+          method,
+          delayMilliseconds,
+          resolution,
+          linkedTimerId,
+        }),
+      ),
+    ).toEqual([
+      {
+        kind: "schedule",
+        method: "setTimeout",
+        delayMilliseconds: 25,
+        resolution: "complete",
+        linkedTimerId: null,
+      },
+      {
+        kind: "cancel",
+        method: "clearTimeout",
+        delayMilliseconds: null,
+        resolution: "complete",
+        linkedTimerId: ir.timerOperations[0]?.timerId,
+      },
+      {
+        kind: "schedule",
+        method: "setInterval",
+        delayMilliseconds: 10,
+        resolution: "complete",
+        linkedTimerId: null,
+      },
+      {
+        kind: "schedule",
+        method: "setImmediate",
+        delayMilliseconds: null,
+        resolution: "complete",
+        linkedTimerId: null,
+      },
+      {
+        kind: "schedule",
+        method: "setTimeout",
+        delayMilliseconds: 5,
+        resolution: "complete",
+        linkedTimerId: null,
+      },
+    ]);
+  });
+
+  it("does not treat a shadowed global object as the timer builtin", () => {
+    const ir = analyzeJavaScriptSemantics(`
+      function run(window) {
+        const handle = window.setTimeout(work, 1);
+        window.clearTimeout(handle);
+        window?.setInterval(work, 1);
+      }
+    `);
+
+    expect(ir.timerOperations).toEqual([]);
+  });
+
   it("does not invent request fields or option keys from dynamic properties", () => {
     const ir = analyzeJavaScriptSemantics(`
       const key = resolveKey();

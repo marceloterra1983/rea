@@ -1,5 +1,6 @@
 import * as t from "@babel/types";
 
+import { isUnmodifiedGlobalReference } from "./javascriptSemanticAmbientWrites.js";
 import { semanticBuiltinNamespacePath } from "./javascriptSemanticProvenance.js";
 
 import type {
@@ -315,8 +316,12 @@ const timerMethod = (
   const method = admittedTimerMethod(
     semanticStaticPropertyName(callee.property, callee.computed),
   );
-  return method !== null &&
-    t.isIdentifier(callee.object) &&
+  if (method === null) return null;
+  // `window.setTimeout` and `globalThis.clearTimeout` are the unbound timer
+  // builtins. An imported `timers.setTimeout` stays a namespace call. A
+  // shadowed `window` parameter is neither.
+  if (isUnmodifiedGlobalReference(callee, state, method)) return method;
+  return t.isIdentifier(callee.object) &&
     timerNamespaceBinding(
       resolveSemanticBindingState(state, callee.object, callee.object.name),
     )
