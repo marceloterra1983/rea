@@ -1510,8 +1510,11 @@ const fileUrlPath = (value: string): FileUrlAdmission => {
     if (DRIVE_LETTER_URL_PATH.test(url.pathname))
       return { status: "unavailable" };
     if (!admitsCanonicalPathSyntax(url.pathname)) return { status: "rejected" };
-    const decoded = decodeURIComponent(url.pathname);
-    if (decoded.includes("\0")) return { status: "rejected" };
+    // Share the URL-reference policy: a non-hex `%` stays literal, and NUL or
+    // non-UTF-8 bytes are rejected. decodeURIComponent throws on `%ZZ` and
+    // used to report that file URL as external.
+    const decoded = percentDecodeUrlPath(url.pathname);
+    if (decoded === null) return { status: "rejected" };
     return { status: "path", path: decoded.replace(/^\/+/, "") };
   } catch (cause: unknown) {
     // Unparseable file URLs have no path to resolve.

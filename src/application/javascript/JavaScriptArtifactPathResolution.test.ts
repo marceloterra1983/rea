@@ -648,6 +648,45 @@ describe("JavaScript file URL resolution", () => {
       resolved_path: "c:/worker.js",
     });
   });
+
+  it("keeps a non-hex percent sequence in a file URL as literal path text", () => {
+    expect(
+      resolve({
+        declaredPath: "file:///foo%ZZ.js",
+        sourcePath: "main.js",
+        context: "module-specifier",
+        moduleKind: "import",
+        files: fileMap([file("foo%ZZ.js", "root")]),
+      }),
+    ).toMatchObject({
+      resolution_status: "resolved",
+      resolved_path: "foo%ZZ.js",
+    });
+    expect(
+      resolve({
+        declaredPath: "file:///foo%C0%80.js",
+        sourcePath: "main.js",
+        context: "module-specifier",
+        moduleKind: "import",
+        files: fileMap([file("foo%C0%80.js", "root")]),
+      }),
+    ).toMatchObject({
+      resolution_status: "rejected",
+      resolved_path: null,
+    });
+    expect(
+      resolve({
+        declaredPath: "file:///foo%20bar.js",
+        sourcePath: "main.js",
+        context: "module-specifier",
+        moduleKind: "import",
+        files: fileMap([file("foo bar.js", "root")]),
+      }),
+    ).toMatchObject({
+      resolution_status: "resolved",
+      resolved_path: "foo bar.js",
+    });
+  });
 });
 
 describe("contextual JavaScript package path resolution", () => {
