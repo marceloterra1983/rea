@@ -14,6 +14,7 @@ import {
   semanticStaticPropertyName,
   unwrapJavaScriptExpression,
 } from "./javascriptAstValues.js";
+import { isUnmodifiedGlobalReference } from "./javascriptSemanticAmbientWrites.js";
 import {
   resolveSemanticBindingState,
   semanticResolutionBlocked,
@@ -366,15 +367,19 @@ const requestMethod = (
   node: t.CallExpression | t.OptionalCallExpression | t.NewExpression,
   state: JavaScriptSemanticAnalysisState,
 ): JavaScriptSemanticRequestOperation["method"] | null => {
-  if (t.isIdentifier(node.callee)) {
-    const name = node.callee.name;
-    const unbound =
-      resolveSemanticBindingState(state, node.callee, name) === undefined &&
-      !semanticResolutionBlocked(state, node.callee, name);
-    if (!t.isNewExpression(node) && unbound && name === "fetch") return "fetch";
-    if (t.isNewExpression(node) && unbound && name === "WebSocket")
-      return "WebSocket";
-  }
+  // `fetch` and `new WebSocket` stay the same operations when they go through
+  // an unmodified global object (`window.fetch`, `new globalThis.WebSocket`).
+  // A shadowed `window` parameter is not that object.
+  if (
+    !t.isNewExpression(node) &&
+    isUnmodifiedGlobalReference(node.callee, state, "fetch")
+  )
+    return "fetch";
+  if (
+    t.isNewExpression(node) &&
+    isUnmodifiedGlobalReference(node.callee, state, "WebSocket")
+  )
+    return "WebSocket";
   const member = memberCallee(node);
   if (member === null || !t.isIdentifier(member.object)) return null;
   const method = semanticStaticPropertyName(member.property, member.computed);

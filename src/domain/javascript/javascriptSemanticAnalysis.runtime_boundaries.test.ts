@@ -131,6 +131,44 @@ describe("JavaScript semantic analysis: runtime boundaries 1", () => {
   });
 });
 
+describe("JavaScript semantic analysis: global object requests", () => {
+  it("tracks fetch and WebSocket calls made through unmodified global objects", () => {
+    const ir = analyzeJavaScriptSemantics(`
+      const payload = "x";
+      const extra = {};
+      window.fetch("/api", { body: payload, headers: extra });
+      new globalThis.WebSocket("wss://chat.example/ws", { protocols: "rea" });
+      new self.WebSocket(endpoint);
+    `);
+
+    expect(
+      ir.requestOperations.map(({ method, endpoint, fields }) => ({
+        method,
+        endpoint,
+        fields: fields.map(({ name }) => name),
+      })),
+    ).toEqual([
+      { method: "fetch", endpoint: "/api", fields: ["body", "headers"] },
+      {
+        method: "WebSocket",
+        endpoint: "wss://chat.example/ws",
+        fields: ["protocols"],
+      },
+      { method: "WebSocket", endpoint: null, fields: [] },
+    ]);
+  });
+
+  it("does not treat a shadowed global object as the fetch builtin", () => {
+    const ir = analyzeJavaScriptSemantics(`
+      function run(window) {
+        window.fetch("/api", { body: payload });
+      }
+    `);
+
+    expect(ir.requestOperations).toEqual([]);
+  });
+});
+
 describe("JavaScript semantic analysis: event dispatch data", () => {
   it("keeps emitted data out of dispatch listener fields", () => {
     const ir = analyzeJavaScriptSemantics(`
