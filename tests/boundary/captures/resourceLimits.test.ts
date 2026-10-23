@@ -19,7 +19,7 @@ it.skipIf(process.platform !== "linux")(
 import json, resource, sys
 assert resource.getrlimit(resource.RLIMIT_AS) == (1073741824, 1073741824)
 assert resource.getrlimit(resource.RLIMIT_FSIZE) == (67108864, 67108864)
-assert resource.getrlimit(resource.RLIMIT_CORE) == (0, 0)
+assert resource.getrlimit(resource.RLIMIT_CORE) == (1, 1)
 if '--version' in sys.argv:
     print('TShark (Wireshark) 4.6.9 (resource fixture)')
 else:

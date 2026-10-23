@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     fputs("limited Python fixture requires an absolute Python and limit\n", stderr);
     return 127;
   }
-  struct rlimit core = {0, 0};
+  struct rlimit core = {1, 1}; // 1 byte discards piped dumps; 0 still reaches them.
   if (setrlimit(RLIMIT_CORE, &core) != 0) {
     perror("setrlimit");
     return 127;

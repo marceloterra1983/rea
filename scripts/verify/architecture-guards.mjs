@@ -90,16 +90,16 @@ check(
 );
 
 // A producer that pins both the soft and hard ceiling of every resource must take
-// the vector from one owner. Audited 2026-10-13 against the other prlimit lanes:
+// the vector from one owner. Audited 2026-10-23 against the other prlimit lanes:
 // src/pcap/PcapNativeBound.ts pairs soft and hard but budgets 300 CPU seconds and
 // has no resident-input ceiling; src/evm/EvmoleInterfaceProvider.ts,
 // src/firmware/FirmwareCommand.ts and src/javascript/recovery/WakaruCommand.ts
-// spell soft-only forms (`--core=0:`, `--core=0`). Those four stay as they are;
+// spell soft-only forms (`--core=1:`, `--core=1`). Those four stay as they are;
 // a new paired producer calls prlimitArgumentVector instead of spelling options.
 check(
   "inline paired prlimit ceilings (use prlimitArgumentVector from src/process/LinuxResourceLimits)",
   files,
-  /--core=0:0/,
+  /--core=1:1/,
   ["src/process/LinuxResourceLimits.ts", "src/pcap/PcapNativeBound.ts"],
 );
 

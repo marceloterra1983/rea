@@ -187,7 +187,8 @@ class OfflineCapture:
         resource.setrlimit(resource.RLIMIT_AS, (768 * 1024 * 1024, 768 * 1024 * 1024))
         resource.setrlimit(resource.RLIMIT_CPU, (30, 30))
         resource.setrlimit(resource.RLIMIT_FSIZE, (OUTPUT_BYTES, OUTPUT_BYTES))
-        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+        # RLIMIT_CORE=1 discards piped dumps; 0 is still delivered to pipe handlers.
+        resource.setrlimit(resource.RLIMIT_CORE, (1, 1))
         request = json.loads(Path(ctx.options.rea_request_path).read_text(encoding="utf-8"))
         try:
             response = {"ok": True, "value": decode(request)}

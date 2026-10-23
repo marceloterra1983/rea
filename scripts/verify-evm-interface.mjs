@@ -379,9 +379,13 @@ try {
     mode: 0o700,
   });
   const signalLimiter = join(root.path, "signal-limiter");
-  await writeFile(signalLimiter, '#!/bin/sh\nulimit -c 0\nkill -XCPU "$$"\n', {
-    mode: 0o700,
-  });
+  await writeFile(
+    signalLimiter,
+    '#!/bin/sh\nprlimit --core=1:1 --pid "$$"\nkill -XCPU "$$"\n',
+    {
+      mode: 0o700,
+    },
+  );
   const fileLimiter = join(root.path, "file-size-limiter");
   const unmarkedLimiter = join(root.path, "unmarked-file-size-limiter");
   await writeFile(
@@ -393,7 +397,7 @@ try {
   // file allowance, keeping the usual address-space, CPU and core budgets.
   await writeFile(
     fileLimiter,
-    '#!/bin/sh\nwhile [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done\n[ "$#" -gt 0 ] || exit 64\nshift\nexec /usr/bin/prlimit --as=3221225472: --cpu=30: --fsize=1: --core=0: -- "$@"\n',
+    '#!/bin/sh\nwhile [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done\n[ "$#" -gt 0 ] || exit 64\nshift\nexec /usr/bin/prlimit --as=3221225472: --cpu=30: --fsize=1: --core=1: -- "$@"\n',
     { mode: 0o700 },
   );
   for (const [limiter, category, resource] of [
