@@ -6,6 +6,10 @@ import { z } from "zod";
 import { projectAnalysisError } from "../../../src/domain/analysisErrorProjection.js";
 import { evmInterfaceSchema } from "../../../src/domain/evm/evmInterface.js";
 import { EvmoleInterfaceProvider } from "../../../src/evm/EvmoleInterfaceProvider.js";
+import {
+  NONDUMPABLE_PYTHON,
+  nondumpableSignalArguments,
+} from "../../fixtures/nondumpableSignal.js";
 import { spawnOwnedProviderProcess } from "../../../src/process/ProviderProcess.js";
 import { cleanupOwnedProcessGroup } from "../../../src/process/ProcessOwnership.js";
 import { waitForProviderProcessReady } from "../../fixtures/providerProcess.js";
@@ -54,21 +58,18 @@ it.runIf(!unsupportedHost).each(["SIGXCPU", "SIGXFSZ", "EFBIG"])(
       ownedPath = spawn.cwd ?? "";
       if (failure === "EFBIG")
         await writeFile(join(ownedPath, "resource.failure"), "F");
+      const signalDeath = failure === "SIGXCPU" || failure === "SIGXFSZ";
       return spawnOwnedProviderProcess({
         ...spawn,
-        // Deliberate signal deaths must not reach systemd-coredump (see LinuxResourceLimits).
-        command: "/usr/bin/prlimit",
-        arguments: [
-          "--core=1:1",
-          "--",
-          process.execPath,
-          "-e",
-          failure === "EFBIG"
-            ? 'process.stdout.write("resource diagnostic", () => { process.exitCode = 76; })'
-            : failure === "SIGXFSZ"
-              ? 'process.on("SIGXFSZ", () => { process.removeAllListeners("SIGXFSZ"); process.kill(process.pid, "SIGXFSZ"); }); process.stdout.write("resource diagnostic", () => process.kill(process.pid, "SIGXFSZ")); setTimeout(() => {}, 1000);'
-              : `process.stdout.write("resource diagnostic", () => process.kill(process.pid, "${failure}"))`,
-        ],
+        command: signalDeath ? NONDUMPABLE_PYTHON : process.execPath,
+        arguments: signalDeath
+          ? nondumpableSignalArguments(failure, {
+              stdout: "resource diagnostic",
+            })
+          : [
+              "-e",
+              'process.stdout.write("resource diagnostic", () => { process.exitCode = 76; })',
+            ],
       });
     });
     const result = await provider.inspect({ path, encoding: "hex" });

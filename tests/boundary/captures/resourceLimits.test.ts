@@ -1,10 +1,11 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { expect, it, onTestFinished } from "vitest";
 import { TsharkCaptureProvider } from "../../../src/captures/TsharkCaptureProvider.js";
 import { PacketCaptureService } from "../../../src/application/captures/PacketCaptureService.js";
+import { nondumpableSignalProgram } from "../../fixtures/nondumpableSignal.js";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 
 // Real kernel-limit verification with a synthetic producer; real TShark has its own verifier.
@@ -121,12 +122,13 @@ it.skipIf(process.platform !== "linux")(
     await writeFile(
       command,
       `#!/usr/bin/python3
-import ctypes, signal, sys
+import signal, sys
+sys.path.insert(0, ${JSON.stringify(dirname(nondumpableSignalProgram))})
+from nondumpable_signal import disarm
 if '--version' in sys.argv:
     print('TShark (Wireshark) 4.6.9 (resource fixture)')
 else:
-    # PR_SET_DUMPABLE=0: the intended SIGXFSZ death must not reach systemd-coredump.
-    ctypes.CDLL(None).prctl(4, 0, 0, 0, 0)
+    disarm()
     signal.signal(signal.SIGXFSZ, signal.SIG_DFL)
     print('before file limit', file=sys.stderr, flush=True)
     with open('overflow', 'wb', buffering=0) as output:

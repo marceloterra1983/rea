@@ -61,11 +61,15 @@ const environment = Object.fromEntries(
   Object.entries(process.env).filter(([, value]) => typeof value === "string"),
 );
 const limitedPython = join(root.path, "limited-python");
+const nondumpableHelper = fileURLToPath(
+  new URL("./fixtures/nondumpable_signal.py", import.meta.url),
+);
 const limitedEnvironment = (option) => ({
   ...environment,
   REA_PWNTOOLS_PYTHON: limitedPython,
   REA_VERIFY_LIMITED_PYTHON: python,
   REA_VERIFY_LIMIT_OPTION: option,
+  REA_NONDUMPABLE_HELPER: nondumpableHelper,
 });
 const client = new Client({ name: "binary-layout-verifier", version: "1" });
 const transport = new StdioClientTransport({

@@ -153,8 +153,88 @@ check(
   ],
 );
 
+// Deliberate self-signals must go through scripts/fixtures/nondumpable_signal.py.
+// That helper calls prctl(PR_SET_DUMPABLE, 0) in the process that dies. Exec
+// resets the flag, and RLIMIT_CORE=1 still invokes a pipe core_pattern.
+const fixtureRoots = ["tests", "scripts"];
+const fixtureAllow = new Set([
+  "scripts/fixtures/nondumpable_signal.py",
+  "scripts/fixtures/binary-layout-limited-python.c",
+  "scripts/verify/architecture-guards.mjs",
+]);
+const codeFile = (name) =>
+  /\.(?:ts|mjs|cjs|js|c|py|sh)$/u.test(name) && !name.endsWith(".d.ts");
+const walkCode = async (dir) => {
+  const output = [];
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    if (entry.name === "node_modules" || entry.name === "dist") continue;
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) output.push(...(await walkCode(path)));
+    else if (codeFile(entry.name)) output.push(path);
+  }
+  return output;
+};
+const fixturePaths = (
+  await Promise.all(fixtureRoots.map((dir) => walkCode(join(root, dir))))
+).flat();
+const fixtureFiles = await Promise.all(
+  fixturePaths.map(async (path) => ({
+    path: relative(root, path).split(sep).join("/"),
+    content: await readFile(path, "utf8"),
+  })),
+);
+const selfSignal = new RegExp(
+  [
+    String.raw`process\.kill\(\s*process\.pid\b`,
+    String.raw`os\.kill\(\s*os\.getpid\s*\(`,
+    String.raw`\bos\.abort\s*\(`,
+    String.raw`\braise\s*\(\s*(?:signum|SIG[A-Z0-9]+)`,
+    String.raw`\bkill\s+-s?\s*(?:SIG)?[A-Z][A-Z0-9]+`,
+    String.raw`\bPR_SET_DUMPABLE\b`,
+    String.raw`\bprctl\s*\(\s*4\b`,
+  ].join("|"),
+  "u",
+);
+const selfSignalOffenders = fixtureFiles.filter(
+  (file) => selfSignal.test(file.content) && !fixtureAllow.has(file.path),
+);
+if (selfSignalOffenders.length > 0)
+  failures.push(
+    `self-signal outside scripts/fixtures/nondumpable_signal.py:\n${selfSignalOffenders
+      .map((file) => `  ${file.path}`)
+      .join("\n")}`,
+  );
+const helper = fixtureFiles.find(
+  (file) => file.path === "scripts/fixtures/nondumpable_signal.py",
+);
+if (
+  helper === undefined ||
+  !helper.content.includes("os.kill(os.getpid()") ||
+  !helper.content.includes("PR_SET_DUMPABLE")
+)
+  failures.push(
+    "scripts/fixtures/nondumpable_signal.py must disarm with PR_SET_DUMPABLE and then signal itself",
+  );
+const limitedPython = fixtureFiles.find(
+  (file) => file.path === "scripts/fixtures/binary-layout-limited-python.c",
+);
+const prctlAt =
+  limitedPython?.content.indexOf("prctl(PR_SET_DUMPABLE, 0)") ?? -1;
+const raiseAt = limitedPython?.content.indexOf("raise(") ?? -1;
+if (
+  limitedPython === undefined ||
+  prctlAt < 0 ||
+  raiseAt < 0 ||
+  prctlAt > raiseAt
+)
+  failures.push(
+    "scripts/fixtures/binary-layout-limited-python.c must call prctl(PR_SET_DUMPABLE, 0) before raise",
+  );
+
 if (failures.length > 0) {
   console.error(`Architecture guards failed:\n\n${failures.join("\n\n")}\n`);
   process.exit(1);
 }
-console.log(`Architecture guards passed across ${files.length} source files.`);
+console.log(
+  `Architecture guards passed across ${files.length} source files and ${fixtureFiles.length} fixture files.`,
+);

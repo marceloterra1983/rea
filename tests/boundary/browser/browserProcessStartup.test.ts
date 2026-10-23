@@ -5,6 +5,10 @@ import { describe, expect } from "vitest";
 
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 import {
+  NONDUMPABLE_PYTHON,
+  nondumpableSignalArguments,
+} from "../../fixtures/nondumpableSignal.js";
+import {
   processTest as it,
   waitForExit,
 } from "../../support/process/processFixture.js";
@@ -44,10 +48,10 @@ describe("browser process startup", () => {
     processes,
   }) => {
     const root = await temporaryRoot();
-    const child = processes.spawn(process.execPath, [
-      "-e",
-      "process.kill(process.pid, 'SIGTERM')",
-    ]);
+    const child = processes.spawn(
+      NONDUMPABLE_PYTHON,
+      nondumpableSignalArguments("SIGTERM"),
+    );
 
     const failure = await waitForBrowserDevtoolsPort({
       child,
