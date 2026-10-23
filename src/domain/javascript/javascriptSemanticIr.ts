@@ -312,6 +312,8 @@ export interface JavaScriptSemanticRequestOperation {
   readonly method:
     | "fetch"
     | "WebSocket"
+    | "EventSource"
+    | "sendBeacon"
     | "request"
     | "get"
     | "json"

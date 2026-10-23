@@ -167,6 +167,71 @@ describe("JavaScript semantic analysis: global object requests", () => {
 
     expect(ir.requestOperations).toEqual([]);
   });
+
+  it("tracks EventSource and sendBeacon calls through unmodified globals", () => {
+    const ir = analyzeJavaScriptSemantics(`
+      new EventSource("/api/chat/stream");
+      new window.EventSource("https://chat.example/events", {
+        withCredentials: true,
+      });
+      new self.EventSource(endpoint);
+      navigator.sendBeacon("/api/telemetry", { event: "click" });
+      window.navigator.sendBeacon("https://metrics.example/collect");
+    `);
+
+    expect(
+      ir.requestOperations.map(({ method, endpoint, fields, resolution }) => ({
+        method,
+        endpoint,
+        fields: fields.map(({ name }) => name),
+        resolution,
+      })),
+    ).toEqual([
+      {
+        method: "EventSource",
+        endpoint: "/api/chat/stream",
+        fields: [],
+        resolution: "complete",
+      },
+      {
+        method: "EventSource",
+        endpoint: "https://chat.example/events",
+        fields: ["withCredentials"],
+        resolution: "complete",
+      },
+      {
+        method: "EventSource",
+        endpoint: null,
+        fields: [],
+        resolution: "partial",
+      },
+      {
+        method: "sendBeacon",
+        endpoint: "/api/telemetry",
+        fields: [],
+        resolution: "complete",
+      },
+      {
+        method: "sendBeacon",
+        endpoint: "https://metrics.example/collect",
+        fields: [],
+        resolution: "complete",
+      },
+    ]);
+  });
+
+  it("does not treat shadowed EventSource or navigator as network builtins", () => {
+    const ir = analyzeJavaScriptSemantics(`
+      function run(EventSource, navigator, window) {
+        new EventSource("/api/chat/stream");
+        new window.EventSource("/events", { withCredentials: true });
+        navigator.sendBeacon("/api/telemetry", { event: "click" });
+        window.navigator.sendBeacon("/collect");
+      }
+    `);
+
+    expect(ir.requestOperations).toEqual([]);
+  });
 });
 
 describe("JavaScript semantic analysis: event dispatch data", () => {

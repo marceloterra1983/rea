@@ -369,17 +369,20 @@ const requestMethod = (
 ): JavaScriptSemanticRequestOperation["method"] | null => {
   // `fetch` and `new WebSocket` stay the same operations when they go through
   // an unmodified global object (`window.fetch`, `new globalThis.WebSocket`).
-  // A shadowed `window` parameter is not that object.
+  // A shadowed `window` parameter is not that object. `new EventSource` is
+  // the same kind of call. `navigator.sendBeacon` is too, including
+  // `window.navigator.sendBeacon`; its body is payload bytes, not named fields.
   if (
     !t.isNewExpression(node) &&
     isUnmodifiedGlobalReference(node.callee, state, "fetch")
   )
     return "fetch";
-  if (
-    t.isNewExpression(node) &&
-    isUnmodifiedGlobalReference(node.callee, state, "WebSocket")
-  )
-    return "WebSocket";
+  if (t.isNewExpression(node)) {
+    if (isUnmodifiedGlobalReference(node.callee, state, "WebSocket"))
+      return "WebSocket";
+    if (isUnmodifiedGlobalReference(node.callee, state, "EventSource"))
+      return "EventSource";
+  } else if (isBrowserSendBeacon(node, state)) return "sendBeacon";
   const member = memberCallee(node);
   if (member === null || !t.isIdentifier(member.object)) return null;
   const method = semanticStaticPropertyName(member.property, member.computed);
@@ -398,13 +401,29 @@ const requestMethod = (
     : null;
 };
 
+const isBrowserSendBeacon = (
+  node: t.CallExpression | t.OptionalCallExpression,
+  state: JavaScriptSemanticAnalysisState,
+): boolean => {
+  const member = memberCallee(node);
+  return (
+    member !== null &&
+    semanticStaticPropertyName(member.property, member.computed) ===
+      "sendBeacon" &&
+    isUnmodifiedGlobalReference(member.object, state, "navigator")
+  );
+};
+
 const requestFields = (
   node: t.CallExpression | t.OptionalCallExpression | t.NewExpression,
   method: JavaScriptSemanticRequestOperation["method"],
   state: JavaScriptSemanticAnalysisState,
 ): JavaScriptSemanticRequestOperation["fields"] => {
+  // sendBeacon's second argument is the request body. Its keys are payload
+  // data, not request field names.
+  if (method === "sendBeacon") return [];
   const candidate =
-    method === "fetch" || method === "WebSocket"
+    method === "fetch" || method === "WebSocket" || method === "EventSource"
       ? node.arguments[1]
       : t.isObjectExpression(node.arguments[0])
         ? node.arguments[0]
