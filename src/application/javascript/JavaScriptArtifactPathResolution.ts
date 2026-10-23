@@ -252,7 +252,7 @@ const resolvePath = (input: ResolveArtifactPathInput): CandidateResolution => {
     input.context === "module-specifier" &&
     (isRelativeJavaScriptModuleSpecifier(input.declaredPath) ||
       input.declaredPath.startsWith("/") ||
-      fileUrlPath(input.declaredPath) !== undefined);
+      recognizesFileUrl(input.declaredPath));
   const emittedSourceCandidates =
     isModuleUrlPath && input.moduleKind !== undefined
       ? typescriptEmittedSourceCandidates(input.sourcePath, confined)
@@ -302,7 +302,7 @@ const isRuntimePathDeclaration = (input: ResolveArtifactPathInput): boolean =>
   (input.context === "module-specifier" &&
     (isRelativeJavaScriptModuleSpecifier(input.declaredPath) ||
       input.declaredPath.startsWith("/") ||
-      fileUrlPath(input.declaredPath) !== undefined));
+      recognizesFileUrl(input.declaredPath)));
 
 const resolveNodeRuntimeEntrypoint = (
   input: ResolveArtifactPathInput,
@@ -404,6 +404,12 @@ const declaresLiteralPercent = (input: ResolveArtifactPathInput): boolean =>
   (input.context === "module-specifier" ||
     input.context === "package-entrypoint");
 
+/** A Windows drive in a URL pathname, inspected before percent-decoding. */
+const DRIVE_LETTER_URL_PATH = /^\/[A-Za-z]:(?:\/|$)/u;
+
+const DRIVE_LETTER_URL_LIMITATION =
+  "Drive-letter URL paths cannot be mapped without the source URL scheme and filesystem root.";
+
 const contextualCandidate = (
   input: ResolveArtifactPathInput,
 ): string | CandidateResolution => {
@@ -425,16 +431,18 @@ const contextualCandidate = (
         ]);
   if (context === "module-specifier" && /^file:/iu.test(declared)) {
     const fileUrl = fileUrlPath(declared);
-    if (fileUrl === null)
+    if (fileUrl.status === "rejected")
       return unresolvedCandidate("rejected", [
         "The file URL path contains syntax that cannot identify a canonical artifact path.",
       ]);
-    if (fileUrl !== undefined)
+    if (fileUrl.status === "unavailable")
+      return unresolvedCandidate("unavailable", [DRIVE_LETTER_URL_LIMITATION]);
+    if (fileUrl.status === "path")
       return input.moduleKind === "require"
         ? unresolvedCandidate("external", [
             "Node CommonJS require specifiers do not resolve file URLs as local artifacts.",
           ])
-        : fileUrl;
+        : fileUrl.path;
     return unresolvedCandidate("external", [
       "File URL authorities or invalid file URL forms cannot be mapped to artifact-local paths.",
     ]);
@@ -474,10 +482,8 @@ const contextualCandidate = (
       return unresolvedCandidate("rejected", [
         "The URL reference cannot be parsed as a URL.",
       ]);
-    if (/^\/[A-Za-z]:(?:\/|$)/u.test(fileReference.pathname))
-      return unresolvedCandidate("unavailable", [
-        "Drive-letter URL paths cannot be mapped without the source URL scheme and filesystem root.",
-      ]);
+    if (DRIVE_LETTER_URL_PATH.test(fileReference.pathname))
+      return unresolvedCandidate("unavailable", [DRIVE_LETTER_URL_LIMITATION]);
     const decoded = percentDecodeUrlPath(declared);
     if (decoded === null)
       return unresolvedCandidate("rejected", [
@@ -1472,8 +1478,18 @@ const exactPackageTargetNotFound = (
   ],
 });
 
-const fileUrlPath = (value: string): string | null | undefined => {
-  if (!/^file:\/\//iu.test(value)) return undefined;
+type FileUrlAdmission =
+  | { readonly status: "path"; readonly path: string }
+  | { readonly status: "rejected" }
+  | { readonly status: "external" }
+  | { readonly status: "unavailable" };
+
+/**
+ * Admit a `file://` URL as an artifact path. A host, a drive letter, or a
+ * form this resolver does not parse stays out of the inventory key space.
+ */
+const fileUrlPath = (value: string): FileUrlAdmission => {
+  if (!/^file:\/\//iu.test(value)) return { status: "external" };
   // URL parsing removes tabs and newlines and normalizes encoded dot segments.
   // Check the raw path first, excluding URL identity suffixes, then check the
   // parsed pathname so parser normalization cannot introduce a separator.
@@ -1484,20 +1500,29 @@ const fileUrlPath = (value: string): string | null | undefined => {
     /[\t\n\r]/u.test(rawPath) ||
     !admitsCanonicalPathSyntax(rawPath)
   )
-    return null;
+    return { status: "rejected" };
   try {
     const url = new URL(value);
-    if (url.protocol !== "file:" || url.hostname !== "") return undefined;
-    if (!admitsCanonicalPathSyntax(url.pathname)) return null;
+    if (url.protocol !== "file:" || url.hostname !== "")
+      return { status: "external" };
+    // `file:///C:/app.js` and `file:///c|/app.js` are drives. An encoded colon
+    // (`c%3A`) is a literal filename and must still resolve.
+    if (DRIVE_LETTER_URL_PATH.test(url.pathname))
+      return { status: "unavailable" };
+    if (!admitsCanonicalPathSyntax(url.pathname)) return { status: "rejected" };
     const decoded = decodeURIComponent(url.pathname);
-    if (decoded.includes("\0")) return null;
-    return decoded.replace(/^\/+/, "");
+    if (decoded.includes("\0")) return { status: "rejected" };
+    return { status: "path", path: decoded.replace(/^\/+/, "") };
   } catch (cause: unknown) {
     // Unparseable file URLs have no path to resolve.
     void cause;
-    return undefined;
+    return { status: "external" };
   }
 };
+
+/** A file URL this resolver recognized, including forms that cannot be a path. */
+const recognizesFileUrl = (value: string): boolean =>
+  fileUrlPath(value).status !== "external";
 
 const unresolvedCandidate = (
   status: UnresolvedArtifactPathStatus,

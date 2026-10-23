@@ -612,6 +612,42 @@ describe("JavaScript file URL resolution", () => {
       }),
     ).toMatchObject({ resolution_status: "external", resolved_path: null });
   });
+
+  it("does not map a drive-letter file URL onto an artifact-local decoy", () => {
+    const files = fileMap([
+      file("C:/app.js", "root"),
+      file("c:/worker.js", "root"),
+      file("assets/app.js", "root"),
+    ]);
+    for (const declaredPath of ["file:///C:/app.js", "file:///c|/worker.js"]) {
+      expect(
+        resolve({
+          declaredPath,
+          sourcePath: "main.js",
+          context: "module-specifier",
+          moduleKind: "import",
+          files,
+        }),
+      ).toMatchObject({
+        declared_path: declaredPath,
+        resolution_status: "unavailable",
+        resolved_path: null,
+        limitations: [expect.stringContaining("Drive-letter")],
+      });
+    }
+    expect(
+      resolve({
+        declaredPath: "file:///c%3A/worker.js",
+        sourcePath: "main.js",
+        context: "module-specifier",
+        moduleKind: "import",
+        files: fileMap([file("c:/worker.js", "root")]),
+      }),
+    ).toMatchObject({
+      resolution_status: "resolved",
+      resolved_path: "c:/worker.js",
+    });
+  });
 });
 
 describe("contextual JavaScript package path resolution", () => {
