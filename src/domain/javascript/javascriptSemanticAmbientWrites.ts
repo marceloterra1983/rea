@@ -270,7 +270,8 @@ export function* indexJavaScriptAmbientWritesSteps(
 /**
  * Recognize an ambient name or direct global-object property without a visible
  * source-local overwrite. This is a syntax-local identity fact, not proof that
- * the runtime's globals have never been patched by other code.
+ * the runtime's globals have never been patched by other code. An optional
+ * property read (`window?.fetch`) is that same property when the call runs.
  */
 export const isUnmodifiedGlobalReference = (
   callee: t.Node,
@@ -280,10 +281,9 @@ export const isUnmodifiedGlobalReference = (
   const node = unwrapJavaScriptExpression(callee).node;
   if (state.ambientWrites.covers(["global", name])) return false;
   if (isUnshadowedGlobal(node, state, name)) return true;
-  if (
-    !t.isMemberExpression(node) ||
-    semanticStaticPropertyKey(node.property, node.computed) !== name
-  )
+  if (!t.isMemberExpression(node) && !t.isOptionalMemberExpression(node))
+    return false;
+  if (semanticStaticPropertyKey(node.property, node.computed) !== name)
     return false;
   const root = unwrapJavaScriptExpression(node.object).node;
   const namespace = globalObjectName(root, state);

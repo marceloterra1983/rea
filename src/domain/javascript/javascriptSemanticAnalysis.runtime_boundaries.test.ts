@@ -232,6 +232,72 @@ describe("JavaScript semantic analysis: global object requests", () => {
 
     expect(ir.requestOperations).toEqual([]);
   });
+
+  it("tracks network calls read through an optional global object", () => {
+    const ir = analyzeJavaScriptSemantics(`
+      const payload = "x";
+      const extra = {};
+      window?.fetch("/api", { body: payload, headers: extra });
+      window.fetch?.("/direct", { method: "POST" });
+      new (globalThis?.WebSocket)("wss://chat.example/ws", { protocols: "rea" });
+      new (self?.EventSource)("/events", { withCredentials: true });
+      window?.navigator.sendBeacon("/collect", { event: "click" });
+    `);
+
+    expect(
+      ir.requestOperations.map(({ method, endpoint, fields, resolution }) => ({
+        method,
+        endpoint,
+        fields: fields.map(({ name }) => name),
+        resolution,
+      })),
+    ).toEqual([
+      {
+        method: "fetch",
+        endpoint: "/api",
+        fields: ["body", "headers"],
+        resolution: "complete",
+      },
+      {
+        method: "fetch",
+        endpoint: "/direct",
+        fields: ["method"],
+        resolution: "complete",
+      },
+      {
+        method: "WebSocket",
+        endpoint: "wss://chat.example/ws",
+        fields: ["protocols"],
+        resolution: "complete",
+      },
+      {
+        method: "EventSource",
+        endpoint: "/events",
+        fields: ["withCredentials"],
+        resolution: "complete",
+      },
+      {
+        method: "sendBeacon",
+        endpoint: "/collect",
+        fields: [],
+        resolution: "complete",
+      },
+    ]);
+  });
+
+  it("does not treat an optional chain on a shadowed global as a builtin", () => {
+    const ir = analyzeJavaScriptSemantics(`
+      function run(window, channel) {
+        window?.fetch("/api", { body: payload });
+        channel?.fetch("/api");
+        new (window?.WebSocket)("wss://chat.example/ws");
+        new (window?.EventSource)("/events");
+        window?.navigator.sendBeacon("/collect", { event: "click" });
+      }
+    `);
+
+    expect(ir.requestOperations).toEqual([]);
+  });
 });
 
 describe("JavaScript semantic analysis: event dispatch data", () => {
