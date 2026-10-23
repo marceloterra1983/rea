@@ -37,4 +37,30 @@ describe("server-sent event endpoints", () => {
   it("keeps a dynamic EventSource URL unreported", () => {
     expect(endpoints("new EventSource(url);")).toEqual([]);
   });
+
+  it("reports member WebSocket URLs the same way as member EventSource URLs", () => {
+    expect(
+      endpoints(`
+        new window.WebSocket("wss://chat.example/ws");
+        new self.WebSocket("/socket");
+        new globalThis.WebSocket("wss://events.example/live");
+      `),
+    ).toEqual([
+      {
+        kind: "network",
+        value: "wss://chat.example/ws",
+        mechanism: "call:window.WebSocket",
+      },
+      {
+        kind: "network",
+        value: "/socket",
+        mechanism: "call:self.WebSocket",
+      },
+      {
+        kind: "network",
+        value: "wss://events.example/live",
+        mechanism: "call:globalThis.WebSocket",
+      },
+    ]);
+  });
 });

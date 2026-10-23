@@ -558,6 +558,7 @@ export const endpointArgument = (
     name === "fetch" ||
     name.endsWith(".fetch") ||
     name === "WebSocket" ||
+    name.endsWith(".WebSocket") ||
     name === "EventSource" ||
     name.endsWith(".EventSource")
   )
