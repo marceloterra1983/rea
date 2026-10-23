@@ -379,9 +379,13 @@ try {
     mode: 0o700,
   });
   const signalLimiter = join(root.path, "signal-limiter");
+  const nondumpableSignal = fileURLToPath(
+    new URL("./fixtures/nondumpable_signal.py", import.meta.url),
+  );
+  const quoteShell = (value) => `'${value.replaceAll("'", `'\\''`)}'`;
   await writeFile(
     signalLimiter,
-    '#!/bin/sh\nprlimit --core=1:1 --pid "$$"\nkill -XCPU "$$"\n',
+    `#!/bin/sh\nexec /usr/bin/python3 -I ${quoteShell(nondumpableSignal)} --signal SIGXCPU\n`,
     {
       mode: 0o700,
     },

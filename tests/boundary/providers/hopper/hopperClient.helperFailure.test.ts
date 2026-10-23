@@ -4,6 +4,10 @@ import { join } from "node:path";
 
 import { expect, it, onTestFinished } from "vitest";
 
+import {
+  NONDUMPABLE_PYTHON,
+  nondumpableSignalArguments,
+} from "../../../fixtures/nondumpableSignal.js";
 import { createTestTempDirectory } from "../../../fixtures/temporaryDirectory.js";
 
 import { AnalysisError } from "../../../../src/domain/analysisErrorBase.js";
@@ -208,20 +212,24 @@ it.each(["exit", "signal", "exit75"] as const)(
         token = session.token;
         const stdout = `API_KEY=local-evidence-kept ${token}\n`;
         const stderr = `Hopper has not been found. Spotlight is unavailable. ${token}\n`;
-        const stop =
+        const child =
           termination === "signal"
-            ? 'process.kill(process.pid, "SIGTERM")'
-            : `process.exit(${termination === "exit75" ? 75 : 1})`;
+            ? spawn(
+                NONDUMPABLE_PYTHON,
+                nondumpableSignalArguments("SIGTERM", { stdout, stderr }),
+                { stdio: ["ignore", "pipe", "pipe"] },
+              )
+            : spawn(
+                process.execPath,
+                [
+                  "-e",
+                  `process.stdout.write(${JSON.stringify(stdout)}, () => process.stderr.write(${JSON.stringify(stderr)}, () => process.exit(${termination === "exit75" ? 75 : 1})));`,
+                ],
+                { stdio: ["ignore", "pipe", "pipe"] },
+              );
         return Promise.resolve(
           ok({
-            process: spawn(
-              process.execPath,
-              [
-                "-e",
-                `process.stdout.write(${JSON.stringify(stdout)}, () => process.stderr.write(${JSON.stringify(stderr)}, () => ${stop}));`,
-              ],
-              { stdio: ["ignore", "pipe", "pipe"] },
-            ),
+            process: child,
             ownsProcessLifetime: false as const,
             providerLifetime: "external-application" as const,
             shutdownMode: "bridge-request" as const,

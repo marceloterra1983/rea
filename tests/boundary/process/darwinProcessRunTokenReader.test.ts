@@ -17,6 +17,10 @@ import { promisify } from "node:util";
 import { _electron as electron } from "playwright-core";
 import { expect, it, vi } from "vitest";
 import { z } from "zod";
+import {
+  NONDUMPABLE_PYTHON,
+  nondumpableSignalArguments,
+} from "../../fixtures/nondumpableSignal.js";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 
 import {
@@ -282,17 +286,15 @@ it.skipIf(process.platform === "win32")(
       "rea-process-token-compiler-signal-test-",
     );
     const executable = join(directory, "segv-xcrun");
-    await writeFile(
-      executable,
-      // RLIMIT_CORE=1 keeps systemd-coredump from recording the deliberate crash.
-      [
-        "#!/bin/sh",
-        `script='process.stderr.write("fatal: segmentation fault during type checking\\n"); process.kill(process.pid, "SIGSEGV")'`,
-        'command -v prlimit >/dev/null && exec prlimit --core=1:1 node -e "$script"',
-        'exec node -e "$script"',
-        "",
-      ].join("\n"),
-    );
+    const quoted = [
+      NONDUMPABLE_PYTHON,
+      ...nondumpableSignalArguments("SIGSEGV", {
+        stderr: "fatal: segmentation fault during type checking\n",
+      }),
+    ]
+      .map((part) => `'${part.replaceAll("'", "'\\''")}'`)
+      .join(" ");
+    await writeFile(executable, `#!/bin/sh\nexec ${quoted}\n`);
     await chmod(executable, 0o755);
     const reader = createDarwinProcessRunTokenReader({
       compiler: { kind: "xcrun", executable: executable },

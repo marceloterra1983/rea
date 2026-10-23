@@ -13,6 +13,10 @@ import { waitForProviderProcessReady } from "../../fixtures/providerProcess.js";
 import { PrivateRuntimeRoot } from "../../../src/process/PrivateRuntimeRoot.js";
 import { cleanupOwnedProcessGroup } from "../../../src/process/ProcessOwnership.js";
 import { binaryLayoutFixture } from "../../fixtures/binaryDiagnostics/layout.js";
+import {
+  NONDUMPABLE_PYTHON,
+  nondumpableSignalArguments,
+} from "../../fixtures/nondumpableSignal.js";
 import { projectAnalysisError } from "../../../src/domain/analysisErrorProjection.js";
 
 const unsupportedHost = process.platform !== "linux" || process.arch !== "x64";
@@ -51,21 +55,18 @@ it.runIf(!unsupportedHost).each([
               ? JSON.stringify(limits)
               : '{"cpu_seconds":999}',
           );
+        const signalDeath = failure === "SIGXCPU" || failure === "SIGXFSZ";
         return spawnOwnedProviderProcess({
           ...spawn,
-          // Deliberate signal deaths must not reach systemd-coredump (see LinuxResourceLimits).
-          command: "/usr/bin/prlimit",
-          arguments: [
-            "--core=1:1",
-            "--",
-            process.execPath,
-            "-e",
-            failure === "EFBIG"
-              ? 'process.stdout.write("resource diagnostic", () => { process.exitCode = 76; })'
-              : failure === "SIGXFSZ"
-                ? 'process.on("SIGXFSZ", () => { process.removeAllListeners("SIGXFSZ"); process.kill(process.pid, "SIGXFSZ"); }); process.stdout.write("resource diagnostic", () => process.kill(process.pid, "SIGXFSZ")); setTimeout(() => {}, 1000);'
-                : `process.stdout.write("resource diagnostic", () => process.kill(process.pid, "${failure}"))`,
-          ],
+          command: signalDeath ? NONDUMPABLE_PYTHON : process.execPath,
+          arguments: signalDeath
+            ? nondumpableSignalArguments(failure, {
+                stdout: "resource diagnostic",
+              })
+            : [
+                "-e",
+                'process.stdout.write("resource diagnostic", () => { process.exitCode = 76; })',
+              ],
         });
       },
     );
@@ -173,16 +174,19 @@ it
             join(ownedPath, "resource.failure"),
             scenario === "wrong-marker" ? Buffer.from([0xcd]) : "M",
           );
+        const signalDeath = scenario === "signal";
         return spawnOwnedProviderProcess({
           ...spawn,
-          command: process.execPath,
-          arguments: [
-            "-e",
-            'process.stderr.write("MemoryError-like diagnostic\\n");' +
-              (scenario === "signal"
-                ? 'process.kill(process.pid,"SIGKILL")'
-                : `process.exit(${scenario === "unmarked-file-status" ? "76" : ["reserved-memory-status", "unmarked-memory-status", "wrong-marker"].includes(scenario) ? "75" : "7"})`),
-          ],
+          command: signalDeath ? NONDUMPABLE_PYTHON : process.execPath,
+          arguments: signalDeath
+            ? nondumpableSignalArguments("SIGKILL", {
+                stderr: "MemoryError-like diagnostic\n",
+              })
+            : [
+                "-e",
+                'process.stderr.write("MemoryError-like diagnostic\\n");' +
+                  `process.exit(${scenario === "unmarked-file-status" ? "76" : ["reserved-memory-status", "unmarked-memory-status", "wrong-marker"].includes(scenario) ? "75" : "7"})`,
+              ],
         });
       },
     );
