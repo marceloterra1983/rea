@@ -154,7 +154,9 @@ describe("JavaScript semantic analysis: runtime boundaries 1", () => {
 
     expect(ir.timerOperations).toEqual([]);
   });
+});
 
+describe("JavaScript semantic analysis: runtime boundaries 2", () => {
   it("does not invent request fields or option keys from dynamic properties", () => {
     const ir = analyzeJavaScriptSemantics(`
       const key = resolveKey();
@@ -303,7 +305,9 @@ describe("JavaScript semantic analysis: global object requests", () => {
 
     expect(ir.requestOperations).toEqual([]);
   });
+});
 
+describe("JavaScript semantic analysis: optional global object requests", () => {
   it("tracks network calls read through an optional global object", () => {
     const ir = analyzeJavaScriptSemantics(`
       const payload = "x";
