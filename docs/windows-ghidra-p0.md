@@ -3,8 +3,8 @@
 This guide describes repository main. npm 4.1.0 includes the Windows
 native bundle; check the [release boundary](installation.md#released-package-and-main)
 before applying these instructions to an older published package.
-Native x86 (32-bit) PE support is available on repository main; npm releases
-through 5.0.0 admit x86-64 PE targets on Windows.
+Native x86 (32-bit) PE support is in tagged releases from rea-agents-6.0.0
+(commit c6dad93); npm releases through 5.0.0 admitted x86-64 PE targets on Windows.
 
 Status: experimental Windows x64 support for the read-only P0 boundary. Windows
 package builds bundle native process, filesystem, and DACL controls. REA

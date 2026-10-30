@@ -76,7 +76,8 @@ export JAVA_HOME=/absolute/path/existing-jdk
 
 On Windows x64, use a REA package with its matching bundled Windows native
 controls **including owned protocol stdin support**. This Windows boundary is
-new on repository main; an older released package can still reject this host.
+in tagged releases from rea-agents-6.4.0 (commit 636b245f1); an older released
+package can still reject this host.
 PowerShell accepts paths containing spaces without additional escaping
 inside these environment values:
 
