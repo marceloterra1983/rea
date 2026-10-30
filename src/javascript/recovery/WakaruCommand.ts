@@ -11,6 +11,10 @@ import { ProviderAdapterError } from "../../domain/providerAdapterError.js";
 import { ProviderCleanupError } from "../../domain/providerCleanupError.js";
 import { cleanupOwnedProcessGroup } from "../../process/ProcessOwnership.js";
 import {
+  prlimitArgumentVector,
+  readLinuxResourceLimits,
+} from "../../process/LinuxResourceLimits.js";
+import {
   ProviderProcessSupervisor,
   spawnOwnedProviderProcess,
   type OwnedProviderProcessSpawnOptions,
@@ -108,24 +112,39 @@ type WakaruCommandContext = {
   environment: Readonly<Record<string, string | undefined>>;
   signal?: AbortSignal;
   launcher?: WakaruLauncher;
+  readLimits?: typeof readLinuxResourceLimits;
   staging?: string;
 };
 
 /** Run one bounded command and verify cleanup before consuming its output. */
 export const runWakaruCommand = async (context: WakaruCommandContext) => {
   checkRecoveryDeadline(context.deadline, context.signal);
+  const readLimits = context.readLimits ?? readLinuxResourceLimits;
+  let effectiveLimits;
+  try {
+    effectiveLimits = await readLimits({
+      address_space_bytes: RECOVERY_LIMITS.addressSpaceBytes,
+      file_bytes: RECOVERY_LIMITS.outputBytes,
+      cpu_seconds: 120,
+    });
+  } catch (cause: unknown) {
+    const reason =
+      cause instanceof Error
+        ? `Inherited Linux resource limits are unavailable: ${cause.message}`
+        : "Inherited Linux resource limits are unavailable";
+    throw new AnalysisCapabilityUnavailableError("wakaru", OPERATION, reason, {
+      cause,
+      userMessage: reason,
+    });
+  }
+  const limitArguments = prlimitArgumentVector(
+    effectiveLimits,
+    context.command,
+  );
   const runId = `rea-wakaru-${randomUUID()}`;
   const spawned = await (context.launcher ?? spawnOwnedProviderProcess)({
     command: context.limiter,
-    arguments: [
-      `--as=${String(RECOVERY_LIMITS.addressSpaceBytes)}`,
-      `--fsize=${String(RECOVERY_LIMITS.outputBytes)}`,
-      "--core=1",
-      "--cpu=120",
-      "--",
-      context.command,
-      ...context.arguments,
-    ],
+    arguments: [...limitArguments, ...context.arguments],
     expectedCommand: null,
     runId,
     cwd: context.cwd,

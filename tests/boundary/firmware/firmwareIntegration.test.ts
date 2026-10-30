@@ -90,8 +90,13 @@ it("binds region observations to exact bytes and preserves provider-reported unc
     report: [{ Analysis: { file_map: [{ id: "hit" }] } }],
   });
   expect(fixture.launches[1]?.args).toEqual(
-    expect.arrayContaining(["--as=1073741824", "--threads", "1"]),
+    expect.arrayContaining([
+      expect.stringMatching(/^--as=\d+:\d+$/),
+      "--threads",
+      "1",
+    ]),
   );
+  expect(fixture.launches[1]?.args).not.toContain("--as=1073741824");
   await assertFirmwareCleanup(fixture.launches);
 });
 

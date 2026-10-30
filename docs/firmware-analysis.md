@@ -135,8 +135,12 @@ tree semantics, vulnerability scanning, emulation or hardware runtime capture.
   a private workspace before analysis. No in-place source modification.
 - One queued heavy operation per provider instance; Binwalk one thread and
   Unblob one worker. No automatic parallel extraction engines.
-- **120-second** deadline; inherited **1 GiB per-process address-space** limit,
-  120 CPU seconds and zero core-dump allowance through `prlimit`.
+- **120-second** deadline.
+- Address space, file size and CPU stay at most at the configured ceilings
+  (1 GiB, the report or staging file budget, and 120 CPU seconds) and drop to
+  a tighter inherited soft or hard limit read from `/proc/self/limits`.
+- Soft and hard core limits both stay at 1 (`--core=1:1` through the shared
+  helper). A core limit of 1 discards core dumps forwarded through a pipe.
 - JSON reports: at most **8 MiB** and valid UTF-8; malformed encoding and
   oversized reports fail without repairing or truncating producer data.
   Diagnostic output is bounded with exact captured byte counts.
