@@ -195,3 +195,15 @@ it("applies the selected scrollback budget to every scheduled resize", () => {
     }).success,
   ).toBe(true);
 });
+
+it("rejects three events whose type is outside the discriminated union", () => {
+  const parsed = processScenarioSchema.safeParse({
+    executable: "/bin/true",
+    events: [{ type: "nope" }, { type: "also-nope" }, { type: "still-nope" }],
+  });
+
+  expect(parsed.success).toBe(false);
+  if (parsed.success) throw new Error("expected event type rejection");
+  expect(parsed.error.issues.length).toBeGreaterThan(0);
+  expect(parsed.error.issues.length).toBeLessThanOrEqual(10);
+});
