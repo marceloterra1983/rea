@@ -3,6 +3,7 @@ import { PassThrough } from "node:stream";
 import { expect, it } from "vitest";
 import { AnalysisCapabilityUnavailableError } from "../../domain/analysisErrorCore.js";
 import { projectAnalysisError } from "../../domain/analysisErrorProjection.js";
+import { prlimitArgumentVector } from "../../process/LinuxResourceLimits.js";
 import {
   resolveWakaruCommand,
   runWakaruCommand,
@@ -150,6 +151,83 @@ it("enforces the shared deadline while exited output streams remain open", async
     producer.stdout.destroy();
     producer.stderr.destroy();
   }
+});
+
+const clampedRecoveryLimits = {
+  address_space_bytes: 536870912,
+  file_bytes: 1048576,
+  cpu_seconds: 10,
+} as const;
+const wakaruCommand = "/selected/wakaru";
+const wakaruProducerArg = "--version";
+
+const wakaruLimitProbe = (
+  readLimits: NonNullable<Parameters<typeof runWakaruCommand>[0]["readLimits"]>,
+) => {
+  let requested: unknown;
+  let recorded: readonly string[] | undefined;
+  let launched = false;
+  const launcher: WakaruLauncher = async (options) => {
+    launched = true;
+    recorded = options.arguments;
+    throw new Error("stop after argv");
+  };
+  const wrapped: NonNullable<
+    Parameters<typeof runWakaruCommand>[0]["readLimits"]
+  > = async (configured, scope) => {
+    requested = configured;
+    return readLimits(configured, scope);
+  };
+  return {
+    launched: () => launched,
+    recorded: () => recorded,
+    requested: () => requested,
+    run: () =>
+      runWakaruCommand({
+        command: wakaruCommand,
+        limiter: "/usr/bin/prlimit",
+        arguments: [wakaruProducerArg],
+        cwd: "/tmp/unused",
+        environment: {},
+        deadline: performance.now() + 60_000,
+        launcher,
+        readLimits: wrapped,
+      }).catch((cause: unknown) => cause),
+  };
+};
+
+it("clamps Wakaru prlimit arguments to the injected inherited ceilings", async () => {
+  const probe = wakaruLimitProbe(async () => clampedRecoveryLimits);
+  await probe.run();
+
+  expect(probe.requested()).toEqual({
+    address_space_bytes: RECOVERY_LIMITS.addressSpaceBytes,
+    file_bytes: RECOVERY_LIMITS.outputBytes,
+    cpu_seconds: 120,
+  });
+  expect(RECOVERY_LIMITS.outputBytes).toBe(134217728);
+  const paired = prlimitArgumentVector(clampedRecoveryLimits, wakaruCommand);
+  expect(paired.slice(0, 3)).toEqual([
+    "--as=536870912:536870912",
+    "--fsize=1048576:1048576",
+    "--cpu=10:10",
+  ]);
+  expect(probe.recorded()).toEqual([...paired, wakaruProducerArg]);
+});
+
+it("does not launch Wakaru when inherited Linux limits cannot be read", async () => {
+  const probe = wakaruLimitProbe(async () => {
+    throw new Error("limits unreadable");
+  });
+  const failure: unknown = await probe.run();
+
+  expect(probe.launched()).toBe(false);
+  expect(failure).toMatchObject({
+    _tag: "AnalysisCapabilityUnavailableError",
+    reason:
+      "Inherited Linux resource limits are unavailable: limits unreadable",
+  });
+  expect(failure).not.toMatchObject({ _tag: "ProviderAdapterError" });
 });
 
 it("honors cancellation while waiting for output after exit", async () => {

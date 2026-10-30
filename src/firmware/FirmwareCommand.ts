@@ -17,6 +17,10 @@ import {
   type SpawnedOwnedProviderProcess,
 } from "../process/ProviderProcess.js";
 import { cleanupOwnedProcessGroup } from "../process/ProcessOwnership.js";
+import {
+  prlimitArgumentVector,
+  readLinuxResourceLimits,
+} from "../process/LinuxResourceLimits.js";
 import { FIRMWARE_LIMITS } from "./FirmwareRelease.js";
 import {
   hashFirmwareFile,
@@ -34,9 +38,11 @@ export const firmwareToolUnavailable = (
   engine: string,
   operation: string,
   reason: string,
+  cause?: unknown,
 ): AnalysisCapabilityUnavailableError =>
   new AnalysisCapabilityUnavailableError(engine, operation, reason, {
     userMessage: reason,
+    ...(cause === undefined ? {} : { cause }),
   });
 
 /** Resolve explicitly supplied executable paths; never install or search for engines. */
@@ -111,24 +117,36 @@ export const runFirmwareCommand = async (context: {
   environment: Readonly<Record<string, string | undefined>>;
   signal: AbortSignal;
   launcher?: FirmwareLauncher;
+  readLimits?: typeof readLinuxResourceLimits;
   outputBudget?: { root: string; bytes: number; entries: number };
   acceptReportedExtractionFailure?: boolean;
   retainCleanup(supervisor: ProviderProcessSupervisor): void;
 }) => {
   const { engine, operation, signal } = context;
   signal.throwIfAborted();
+  const readLimits = context.readLimits ?? readLinuxResourceLimits;
+  let effectiveLimits;
+  try {
+    effectiveLimits = await readLimits({
+      address_space_bytes: FIRMWARE_LIMITS.addressSpaceBytes,
+      file_bytes: context.outputBudget?.bytes ?? FIRMWARE_LIMITS.reportBytes,
+      cpu_seconds: 120,
+    });
+  } catch (cause: unknown) {
+    const reason =
+      cause instanceof Error
+        ? `Inherited Linux resource limits are unavailable: ${cause.message}`
+        : "Inherited Linux resource limits are unavailable";
+    throw firmwareToolUnavailable(engine, operation, reason, cause);
+  }
+  const limitArguments = prlimitArgumentVector(
+    effectiveLimits,
+    context.command,
+  );
   const runId = `rea-firmware-${randomUUID()}`;
   const spawned = await (context.launcher ?? spawnOwnedProviderProcess)({
     command: context.limiter,
-    arguments: [
-      `--as=${FIRMWARE_LIMITS.addressSpaceBytes}`,
-      `--fsize=${context.outputBudget?.bytes ?? FIRMWARE_LIMITS.reportBytes}`,
-      "--core=1",
-      "--cpu=120",
-      "--",
-      context.command,
-      ...context.args,
-    ],
+    arguments: [...limitArguments, ...context.args],
     expectedCommand: null,
     runId,
     cwd: context.cwd,
